@@ -1,0 +1,6 @@
+{
+  "appId": "com.oonay.detecteur",
+  "appName": "Détecteur",
+  "webDir": "www",
+  "android": { "backgroundColor": "#0c1410" }
+}

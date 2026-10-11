@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0c1410">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Détecteur">
+<title>Détecteur d'Orbes</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="fonts.css">
+<style>
+/* Layout : un appareil tenu en main — radar rond au centre, gros bouton de capture dessous, deux onglets en bas. Thème unique sombre (écran d'appareil). */
+:root{
+  --ink:#0c1410;        /* fond */
+  --panel:#16211b;      /* surfaces */
+  --line:#26362c;       /* filets */
+  --text:#e6f1e8;
+  --muted:#8ea596;
+  --screen:#1d7340;     /* écran radar */
+  --screen-deep:#0e3d21;
+  --grid:#7fe0a0;
+  --blip:#ffd23a;       /* points */
+  --capture:#ff7a1a;    /* bouton capture */
+  --danger:#ff5a4a;
+  --ok:#5fe08a;
+  --warn:#ffc04a;
+  --f-display:"Bungee","Arial Black",Impact,sans-serif;
+  --f-ui:"Chakra Petch","Segoe UI",Roboto,system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--ink);color:var(--text);font:15px/1.4 var(--f-ui);overscroll-behavior:none;
+  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);display:flex;flex-direction:column;user-select:none;-webkit-user-select:none}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--blip);outline-offset:2px}
+
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px 6px}
+.brand{font-family:var(--f-display);font-size:17px;letter-spacing:.02em;color:var(--blip);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 8px;border-radius:99px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.chip.ok i{background:var(--ok)} .chip.warn i{background:var(--warn)} .chip.bad i{background:var(--danger)}
+
+main{flex:1;min-height:0;position:relative}
+.view{position:absolute;inset:0;overflow-y:auto;padding:4px 16px 16px}
+[hidden]{display:none!important}
+
+/* ---------- Radar ---------- */
+#radarView{display:flex;flex-direction:column;align-items:center;gap:12px}
+.device{position:relative;width:min(86vw,52vh,420px);aspect-ratio:1;margin-top:22px;flex:none}
+.knob{position:absolute;left:50%;top:-20px;transform:translateX(-50%);width:54px;height:30px;border:none;border-radius:10px 10px 4px 4px;
+  background:linear-gradient(#f4f6f2,#b9c0b6);box-shadow:inset 0 -3px 0 #8c958a,0 2px 4px #0008;z-index:2}
+.knob:active{transform:translateX(-50%) translateY(3px);box-shadow:inset 0 -1px 0 #8c958a}
+.knob span{display:block;font-size:10px;font-weight:700;color:#3a443c;letter-spacing:.05em}
+.bezel{position:absolute;inset:0;border-radius:50%;padding:5.5%;
+  background:conic-gradient(from 210deg,#f6f8f4,#aeb6ac,#eef1ea,#8f988d,#f6f8f4);box-shadow:0 10px 30px #000a,inset 0 0 0 2px #fff6}
+.glass{position:relative;width:100%;height:100%;border-radius:50%;overflow:hidden;box-shadow:inset 0 0 0 4px #0a2414,inset 0 6px 18px #000a}
+#radar{width:100%;height:100%;display:block;touch-action:manipulation}
+
+.readout{width:min(100%,460px);display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cell{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.cell small{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cell b{display:block;font-size:17px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.target{width:min(100%,460px);font-size:13px;color:var(--muted);text-align:center;min-height:1.4em}
+.target strong{color:var(--blip)}
+
+.capture{width:min(100%,460px);flex:none;display:flex;align-items:center;justify-content:center;gap:10px;border:none;border-radius:16px;
+  padding:16px;font-family:var(--f-display);font-size:18px;letter-spacing:.03em;color:#2a1300;
+  background:linear-gradient(#ffa04d,var(--capture));box-shadow:0 5px 0 #b44c00,0 8px 18px #ff7a1a40}
+.capture:active{transform:translateY(4px);box-shadow:0 1px 0 #b44c00}
+.capture:disabled{filter:grayscale(.8) brightness(.7)}
+.capture svg{width:22px;height:22px}
+
+/* ---------- Liste ---------- */
+.listhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:6px 0 10px}
+.listhead h2{font-family:var(--f-display);font-size:18px;margin:0;font-weight:400}
+.listhead span{color:var(--muted);font-size:13px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600}
+.btn:active{background:var(--line)}
+.btn.primary{background:var(--capture);border-color:var(--capture);color:#2a1300}
+ul.points{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.pt{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px}
+.pt.active{border-color:var(--blip);box-shadow:0 0 0 1px var(--blip) inset}
+.orb{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff7c8,var(--blip) 40%,#e08a00);position:relative;box-shadow:0 0 12px #ffd23a55}
+.orb canvas{position:absolute;inset:0;width:100%;height:100%}
+.pt .meta{min-width:0}
+.pt .name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pt .sub{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pt .dist{font-variant-numeric:tabular-nums;font-weight:700;text-align:right}
+.pt .acts{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}
+.pt .acts .btn{padding:6px 10px;font-size:12px}
+.btn.del{color:var(--danger)}
+.empty{text-align:center;color:var(--muted);padding:40px 12px;border:1px dashed var(--line);border-radius:14px}
+.empty b{display:block;color:var(--text);font-size:16px;margin-bottom:4px}
+.note{font-size:12px;color:var(--muted);margin-top:16px;line-height:1.5}
+
+/* ---------- Nav ---------- */
+nav{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);background:var(--panel)}
+nav button{border:none;background:none;padding:10px 0 12px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button svg{width:22px;height:22px}
+nav button[aria-selected="true"]{color:var(--blip)}
+
+/* ---------- Overlay / toast ---------- */
+#intro{position:fixed;inset:0;z-index:20;background:radial-gradient(circle at 50% 35%,#163a24,var(--ink) 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
+#intro h1{font-family:var(--f-display);font-weight:400;font-size:30px;line-height:1.05;margin:0;color:var(--blip);text-wrap:balance}
+#intro p{max-width:34ch;color:var(--muted);margin:0}
+#intro .capture{max-width:320px}
+#intro .small{font-size:12px}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:30;background:#fff;color:#111;font-weight:600;
+  padding:10px 16px;border-radius:12px;box-shadow:0 6px 20px #0008;max-width:calc(100% - 32px);text-align:center;font-size:14px}
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--text);padding:18px;width:min(92vw,380px)}
+dialog::backdrop{background:#000a}
+dialog h3{margin:0 0 10px;font-family:var(--f-display);font-weight:400}
+dialog input{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--ink);color:var(--text);font:inherit;user-select:text;-webkit-user-select:text}
+dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+@media (prefers-reduced-motion:reduce){.capture:active,.knob:active{transform:none}}
+</style>
+</head>
+<body>
+
+<div id="intro">
+  <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
+    <circle cx="60" cy="60" r="56" fill="#cfd6cc"/><circle cx="60" cy="60" r="48" fill="#1d7340"/>
+    <g stroke="#7fe0a0" stroke-opacity=".45" stroke-width="1"><path d="M12 36h96M12 60h96M12 84h96M36 12v96M60 12v96M84 12v96"/></g>
+    <path d="M60 52l6 13h-12z" fill="#ff5a4a"/><circle cx="82" cy="40" r="5" fill="#ffd23a"/><circle cx="40" cy="84" r="4" fill="#ffd23a"/>
+  </svg>
+  <h1>Détecteur d'Orbes</h1>
+  <p>Enregistre des points GPS, puis retrouve-les sur le radar. Le radar tourne avec ton téléphone grâce à la boussole.</p>
+  <button class="capture" id="startBtn" type="button">Allumer le détecteur</button>
+  <p class="small">Autorise la localisation et l'accès aux capteurs de mouvement quand le téléphone le demande.</p>
+</div>
+
+<header>
+  <div class="brand">Détecteur</div>
+  <div class="chips">
+    <span class="chip" id="gpsChip"><i></i><span>GPS</span></span>
+    <span class="chip" id="cmpChip"><i></i><span>Boussole</span></span>
+  </div>
+</header>
+
+<main>
+  <section class="view" id="radarView" aria-label="Radar">
+    <div class="device">
+      <button class="knob" id="knob" type="button" aria-label="Changer l'échelle du radar"><span id="knobLbl">AUTO</span></button>
+      <div class="bezel"><div class="glass"><canvas id="radar" aria-label="Radar des points enregistrés"></canvas></div></div>
+    </div>
+    <div class="target" id="targetLine">&nbsp;</div>
+    <div class="readout">
+      <div class="cell"><small>Échelle</small><b id="rScale">–</b></div>
+      <div class="cell"><small>Plus proche</small><b id="rNear">–</b></div>
+      <div class="cell"><small>Cap</small><b id="rHead">–</b></div>
+    </div>
+  </section>
+
+  <section class="view" id="listView" aria-label="Points enregistrés" hidden>
+    <div class="listhead"><h2>Points</h2><span id="count">0</span></div>
+    <div class="tools">
+      <button class="btn primary" id="captureBtn" type="button">+ Capturer ici</button>
+      <button class="btn" id="exportBtn" type="button">Exporter</button>
+      <button class="btn" id="importBtn" type="button">Importer</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+    <ul class="points" id="points"></ul>
+    <p class="note">Touchez « Suivre » pour faire d'un point la cible du radar : il clignote plus fort, sa distance s'affiche, et le téléphone vibre quand vous êtes à moins de 10 m. Les points restent enregistrés sur ce téléphone, même hors connexion.</p>
+  </section>
+</main>
+
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-view="radarView" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 12l6-6"/></svg>Radar</button>
+  <button role="tab" aria-selected="false" data-view="listView" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Points</button>
+</nav>
+
+<dialog id="renameDlg">
+  <form method="dialog" id="renameForm">
+    <h3>Renommer</h3>
+    <input id="renameInput" maxlength="40" autocomplete="off">
+    <div class="row"><button class="btn" value="cancel" type="submit">Annuler</button><button class="btn primary" value="ok" type="submit">Enregistrer</button></div>
+  </form>
+</dialog>
+<dialog id="delDlg">
+  <form method="dialog">
+    <h3>Supprimer ?</h3>
+    <p id="delText" style="margin:0;color:var(--muted)"></p>
+    <div class="row"><button class="btn" value="cancel" type="submit">Annuler</button><button class="btn primary" value="ok" type="submit" style="background:var(--danger);border-color:var(--danger)">Supprimer</button></div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+/* ================= Données ================= */
+const KEY = "detecteur-orbes.v1";
+const DEMO = location.hash === "#demo";
+let points = load();
+let targetId = null;
+try { targetId = localStorage.getItem(KEY + ".target"); } catch (e) {}
+
+function load() {
+  if (DEMO) return [
+    { id: "d1", name: "Boulangerie", lat: 48.8590, lon: 2.3490, acc: 6, t: Date.now() - 864e5, stars: 1 },
+    { id: "d2", name: "Parking", lat: 48.8572, lon: 2.3540, acc: 9, t: Date.now() - 36e5, stars: 2 },
+    { id: "d3", name: "Banc du parc", lat: 48.8548, lon: 2.3470, acc: 4, t: Date.now() - 6e5, stars: 3 },
+    { id: "d4", name: "Chez Léa", lat: 48.8800, lon: 2.3300, acc: 12, t: Date.now() - 6e6, stars: 4 }
+  ];
+  try { const a = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+function save() {
+  if (DEMO) return;
+  try { localStorage.setItem(KEY, JSON.stringify(points)); localStorage.setItem(KEY + ".target", targetId || ""); } catch (e) { toast("Impossible d'enregistrer sur ce téléphone"); }
+}
+
+/* ================= Géo ================= */
+const R_EARTH = 6371008.8, rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+function distance(a, b) {
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function bearing(a, b) {
+  const y = Math.sin(rad(b.lon - a.lon)) * Math.cos(rad(b.lat));
+  const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lon - a.lon));
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+function fmtDist(m) {
+  if (m == null || !isFinite(m)) return "–";
+  if (m < 1000) return Math.round(m) + " m";
+  if (m < 10000) return (m / 1000).toFixed(2).replace(".", ",") + " km";
+  return Math.round(m / 1000) + " km";
+}
+const CARD = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+const cardinal = d => CARD[Math.round(d / 45) % 8];
+
+/* ================= État capteurs ================= */
+let pos = null;          // {lat, lon, acc, t}
+let heading = null;      // degrés, 0 = nord
+let headingSrc = null;   // "compass" | "gps"
+let gpsErr = null;
+let watchId = null;
+
+function startGPS() {
+  if (DEMO) {
+    pos = { lat: 48.8566, lon: 2.3522, acc: 5, t: Date.now() };
+    return;
+  }
+  if (!("geolocation" in navigator)) { gpsErr = "absent"; updateChips(); return; }
+  watchId = navigator.geolocation.watchPosition(p => {
+    gpsErr = null;
+    pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: p.timestamp };
+    // Repli : cap GPS quand on marche et qu'il n'y a pas de boussole
+    if (headingSrc !== "compass" && p.coords.heading != null && !isNaN(p.coords.heading) && (p.coords.speed || 0) > 0.8) {
+      heading = p.coords.heading; headingSrc = "gps";
+    }
+    updateChips(); renderList(false);
+  }, e => {
+    gpsErr = e.code === 1 ? "refusé" : "indisponible";
+    updateChips();
+    if (e.code === 1) toast("Localisation refusée : autorisez-la dans les réglages du navigateur.");
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+
+let lastOrient = 0;
+function screenAngle() {
+  return (screen.orientation && typeof screen.orientation.angle === "number") ? screen.orientation.angle : (window.orientation || 0);
+}
+function onOrient(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === "number" && !isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading; // iOS
+  else if ((e.absolute || e.type === "deviceorientationabsolute") && e.alpha != null) h = 360 - e.alpha;          // Android
+  if (h == null) return;
+  h = (h + screenAngle() + 360) % 360;
+  // lissage circulaire
+  if (heading == null || headingSrc !== "compass") heading = h;
+  else {
+    let d = ((h - heading + 540) % 360) - 180;
+    heading = (heading + d * 0.25 + 360) % 360;
+  }
+  headingSrc = "compass"; lastOrient = Date.now();
+}
+async function startCompass() {
+  if (DEMO) { headingSrc = "compass"; heading = 0; return; }
+  try {
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r !== "granted") { toast("Boussole refusée : le radar restera orienté nord en haut."); return; }
+    }
+  } catch (e) {}
+  if ("ondeviceorientationabsolute" in window) window.addEventListener("deviceorientationabsolute", onOrient);
+  else window.addEventListener("deviceorientation", onOrient);
+}
+
+function updateChips() {
+  const g = document.getElementById("gpsChip"), c = document.getElementById("cmpChip");
+  g.className = "chip " + (gpsErr ? "bad" : !pos ? "warn" : pos.acc > 30 ? "warn" : "ok");
+  g.lastElementChild.textContent = gpsErr ? "GPS " + gpsErr : !pos ? "GPS…" : "GPS ±" + Math.round(pos.acc) + " m";
+  const live = headingSrc === "compass" && (DEMO || Date.now() - lastOrient < 3000);
+  c.className = "chip " + (live ? "ok" : headingSrc === "gps" ? "warn" : "bad");
+  c.lastElementChild.textContent = live ? "Boussole" : headingSrc === "gps" ? "Cap GPS" : "Nord en haut";
+}
+
+/* ================= Échelles ================= */
+const SCALES = [null, 20, 50, 200, 1000, 5000, 50000, 1000000]; // rayon du radar en mètres, null = auto
+let scaleIdx = 0;
+try { scaleIdx = Math.min(SCALES.length - 1, +localStorage.getItem(KEY + ".scale") || 0); } catch (e) {}
+const scaleLabel = m => m >= 1000 ? (m / 1000) + " km" : m + " m";
+function autoScale() {
+  if (!pos || !points.length) return 200;
+  const tgt = points.find(p => p.id === targetId);
+  const ref = tgt ? distance(pos, tgt) : Math.min(...points.map(p => distance(pos, p)));
+  for (const s of SCALES.slice(1)) if (ref <= s * 0.85) return s;
+  return SCALES[SCALES.length - 1];
+}
+function currentRange() { return SCALES[scaleIdx] ?? autoScale(); }
+document.getElementById("knob").addEventListener("click", () => {
+  scaleIdx = (scaleIdx + 1) % SCALES.length;
+  try { localStorage.setItem(KEY + ".scale", scaleIdx); } catch (e) {}
+  document.getElementById("knobLbl").textContent = SCALES[scaleIdx] == null ? "AUTO" : scaleLabel(SCALES[scaleIdx]);
+  beep(880, 0.04);
+});
+document.getElementById("knobLbl").textContent = SCALES[scaleIdx] == null ? "AUTO" : scaleLabel(SCALES[scaleIdx]);
+
+/* ================= Rendu radar ================= */
+const cv = document.getElementById("radar"), ctx = cv.getContext("2d");
+let W = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(3, window.devicePixelRatio || 1);
+  const r = cv.getBoundingClientRect();
+  W = r.width; cv.width = Math.round(W * DPR); cv.height = Math.round(W * DPR);
+}
+new ResizeObserver(resize).observe(cv);
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function draw(now) {
+  if (!W) { requestAnimationFrame(draw); return; }
+  const c = W / 2, R = W / 2;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // écran
+  const bg = ctx.createRadialGradient(c, c * 0.8, R * 0.1, c, c, R);
+  bg.addColorStop(0, "#2a9152"); bg.addColorStop(0.7, "#1d7340"); bg.addColorStop(1, "#0e3d21");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, W);
+
+  const h = heading ?? 0;
+  const range = currentRange();
+  // grille (tourne avec la carte)
+  ctx.save(); ctx.translate(c, c); ctx.rotate(-rad(h));
+  ctx.strokeStyle = "rgba(127,224,160,.38)"; ctx.lineWidth = 1;
+  const step = R / 3;
+  ctx.beginPath();
+  for (let k = -5; k <= 5; k++) { ctx.moveTo(k * step, -R * 1.5); ctx.lineTo(k * step, R * 1.5); ctx.moveTo(-R * 1.5, k * step); ctx.lineTo(R * 1.5, k * step); }
+  ctx.stroke();
+  // repère nord
+  ctx.fillStyle = "rgba(230,255,236,.85)"; ctx.font = "700 " + Math.round(R * 0.075) + "px 'Chakra Petch',sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("N", 0, -R * 0.88);
+  ctx.restore();
+
+  // impulsion
+  if (!reduceMotion) {
+    const p = (now % 2400) / 2400;
+    ctx.strokeStyle = `rgba(200,255,215,${0.35 * (1 - p)})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(c, c, R * p, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // points
+  let nearest = null;
+  const blink = reduceMotion ? 1 : 0.55 + 0.45 * Math.sin(now / 260);
+  if (pos) {
+    for (const p of points) {
+      const d = distance(pos, p), b = bearing(pos, p);
+      if (!nearest || d < nearest.d) nearest = { d, b, p };
+      const a = rad(b - h);
+      const isT = p.id === targetId;
+      const rr = d / range * R * 0.92;
+      if (rr <= R * 0.92) {
+        const x = c + rr * Math.sin(a), y = c - rr * Math.cos(a);
+        const s = R * (isT ? 0.055 : 0.04);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, s * 2.6);
+        g.addColorStop(0, `rgba(255,230,120,${0.9 * blink})`); g.addColorStop(1, "rgba(255,210,58,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, s * 2.6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = `rgba(255,${isT ? 240 : 214},${isT ? 140 : 58},${0.6 + 0.4 * blink})`;
+        ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill();
+        if (isT) { ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, s * 1.8, 0, Math.PI * 2); ctx.stroke(); }
+      } else {
+        // hors de portée : flèche sur le bord
+        const er = R * 0.95, x = c + er * Math.sin(a), y = c - er * Math.cos(a);
+        ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+        ctx.fillStyle = isT ? `rgba(255,255,255,${0.6 + 0.4 * blink})` : "rgba(255,210,58,.75)";
+        const s = R * (isT ? 0.06 : 0.04);
+        ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s * 0.8, s * 0.6); ctx.lineTo(-s * 0.8, s * 0.6); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  // appareil au centre
+  ctx.save(); ctx.translate(c, c);
+  const t = R * 0.07;
+  ctx.fillStyle = "#ff4b3a"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, -t * 1.2); ctx.lineTo(t * 0.85, t * 0.8); ctx.lineTo(0, t * 0.35); ctx.lineTo(-t * 0.85, t * 0.8); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  if (pos && pos.acc && pos.acc / range * R < R) {
+    ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(0, 0, Math.max(t * 1.5, pos.acc / range * R * 0.92), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.restore();
+
+  // reflet du verre
+  const gl = ctx.createLinearGradient(0, 0, W * 0.6, W * 0.6);
+  gl.addColorStop(0, "rgba(255,255,255,.16)"); gl.addColorStop(0.5, "rgba(255,255,255,0)");
+  ctx.fillStyle = gl; ctx.beginPath(); ctx.ellipse(c * 0.75, c * 0.55, R * 0.7, R * 0.42, -0.6, 0, Math.PI * 2); ctx.fill();
+
+  if (!pos) {
+    ctx.fillStyle = "rgba(230,255,236,.9)"; ctx.font = "600 " + Math.round(R * 0.07) + "px 'Chakra Petch',sans-serif";
+    ctx.textAlign = "center"; ctx.fillText(gpsErr ? "GPS " + gpsErr : "Recherche du signal GPS…", c, c + R * 0.3);
+  }
+
+  updateReadout(range, nearest);
+  proximity(now);
+  requestAnimationFrame(draw);
+}
+
+let lastReadout = 0;
+function updateReadout(range, nearest) {
+  const now = performance.now();
+  if (now - lastReadout < 200) return; lastReadout = now;
+  document.getElementById("rScale").textContent = scaleLabel(range) + (SCALES[scaleIdx] == null ? " ·A" : "");
+  document.getElementById("rNear").textContent = nearest ? fmtDist(nearest.d) : (points.length ? "–" : "aucun");
+  document.getElementById("rHead").textContent = heading == null ? "–" : Math.round(heading) + "° " + cardinal(heading);
+  const tl = document.getElementById("targetLine");
+  const tgt = points.find(p => p.id === targetId);
+  if (tgt && pos) {
+    const d = distance(pos, tgt), b = bearing(pos, tgt);
+    let turn = "";
+    if (heading != null) {
+      const rel = ((b - heading + 540) % 360) - 180;
+      turn = Math.abs(rel) < 15 ? " · droit devant" : rel > 0 ? ` · ${Math.round(rel)}° à droite` : ` · ${Math.round(-rel)}° à gauche`;
+    }
+    tl.innerHTML = "";
+    const s = document.createElement("strong"); s.textContent = tgt.name;
+    tl.append("Cible : ", s, ` à ${fmtDist(d)} (${cardinal(b)})${turn}`);
+  } else if (!points.length) {
+    tl.textContent = "Aucun point. Enregistre ta position depuis l’onglet Points.";
+  } else tl.textContent = "Touche le bouton du haut pour changer d'échelle.";
+  updateChips();
+}
+
+/* ================= Proximité : bip + vibration ================= */
+let audio = null, lastPing = 0, foundBuzzed = null;
+function beep(f = 1200, dur = 0.06) {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = "square"; o.frequency.value = f; g.gain.value = 0.04;
+    o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + dur);
+  } catch (e) {}
+}
+function proximity(now) {
+  const tgt = points.find(p => p.id === targetId);
+  if (!tgt || !pos || document.hidden || document.getElementById("radarView").hidden) return;
+  const d = distance(pos, tgt);
+  if (d > 300) return;
+  const interval = Math.max(150, Math.min(2500, d * 8));
+  if (now - lastPing > interval) { lastPing = now; beep(d < 10 ? 1600 : 1100); }
+  if (d < 10 && foundBuzzed !== tgt.id) {
+    foundBuzzed = tgt.id;
+    try { navigator.vibrate && navigator.vibrate([120, 60, 120, 60, 300]); } catch (e) {}
+    toast("Trouvé ! Tu es sur " + tgt.name);
+  }
+  if (d > 25 && foundBuzzed === tgt.id) foundBuzzed = null;
+}
+
+/* ================= Capture ================= */
+async function capture() {
+  const btns = [document.getElementById("captureBtn")];
+  btns.forEach(b => b.disabled = true);
+  try {
+    let fix = pos;
+    if (!DEMO && "geolocation" in navigator && (!pos || Date.now() - pos.t > 5000 || pos.acc > 20)) {
+      fix = await new Promise(res => navigator.geolocation.getCurrentPosition(
+        p => res({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: p.timestamp }),
+        () => res(pos), { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }));
+      if (fix && pos && pos.acc < fix.acc && Date.now() - pos.t < 15000) fix = pos;
+    }
+    if (!fix) { toast("Pas encore de position GPS. Réessaie à l'extérieur."); return; }
+    const n = points.length + 1;
+    const p = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: "Point " + n,
+      lat: +fix.lat.toFixed(7), lon: +fix.lon.toFixed(7), acc: Math.round(fix.acc), t: Date.now(), stars: ((n - 1) % 7) + 1 };
+    points.push(p); save(); renderList(true);
+    try { navigator.vibrate && navigator.vibrate(60); } catch (e) {}
+    beep(1400, 0.08);
+    toast(`${p.name} enregistré (±${p.acc} m)` + (p.acc > 50 ? " — précision faible" : ""));
+  } finally { btns.forEach(b => b.disabled = false); updateChips(); }
+}
+document.getElementById("captureBtn").addEventListener("click", capture);
+
+/* ================= Liste ================= */
+function starOrb(n) {
+  const c = document.createElement("canvas"); c.width = c.height = 88;
+  const g = c.getContext("2d"); g.fillStyle = "#d8340f";
+  const spots = [[[44, 44]], [[32, 44], [56, 44]], [[44, 30], [32, 54], [56, 54]], [[32, 32], [56, 32], [32, 56], [56, 56]],
+    [[44, 44], [26, 28], [62, 28], [26, 60], [62, 60]], [[30, 26], [58, 26], [22, 46], [66, 46], [30, 64], [58, 64]],
+    [[44, 44], [30, 26], [58, 26], [22, 46], [66, 46], [30, 64], [58, 64]]][n - 1];
+  const r = n <= 2 ? 12 : n <= 4 ? 10 : 8;
+  for (const [x, y] of spots) {
+    g.beginPath();
+    for (let i = 0; i < 10; i++) { const a = Math.PI / 5 * i - Math.PI / 2, rr = i % 2 ? r * 0.45 : r; g.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a)); }
+    g.closePath(); g.fill();
+  }
+  return c;
+}
+let lastListRender = 0;
+function renderList(force) {
+  if (!force && (document.getElementById("listView").hidden || performance.now() - lastListRender < 3000)) return;
+  lastListRender = performance.now();
+  const ul = document.getElementById("points");
+  document.getElementById("count").textContent = points.length + (points.length > 1 ? " points" : " point");
+  ul.innerHTML = "";
+  if (!points.length) {
+    ul.innerHTML = '<li class="empty"><b>Aucun point enregistré</b>Touche « Capturer ici » pour enregistrer ta position actuelle.</li>';
+    return;
+  }
+  const items = points.map(p => ({ p, d: pos ? distance(pos, p) : null }))
+    .sort((a, b) => (a.d ?? 0) - (b.d ?? 0) || b.p.t - a.p.t);
+  for (const { p, d } of items) {
+    const li = document.createElement("li"); li.className = "pt" + (p.id === targetId ? " active" : "");
+    const orb = document.createElement("div"); orb.className = "orb"; orb.append(starOrb(p.stars || 1));
+    const meta = document.createElement("div"); meta.className = "meta";
+    const nm = document.createElement("div"); nm.className = "name"; nm.textContent = p.name;
+    const sub = document.createElement("div"); sub.className = "sub";
+    sub.textContent = `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)} · ±${p.acc} m · ${new Date(p.t).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+    meta.append(nm, sub);
+    const dist = document.createElement("div"); dist.className = "dist";
+    dist.textContent = d == null ? "–" : fmtDist(d);
+    if (d != null) { const s = document.createElement("div"); s.className = "sub"; s.textContent = cardinal(bearing(pos, p)); dist.append(s); }
+    const acts = document.createElement("div"); acts.className = "acts";
+    acts.append(
+      mkBtn(p.id === targetId ? "Ne plus suivre" : "Suivre", "", () => {
+        targetId = p.id === targetId ? null : p.id; save(); renderList(true);
+        if (targetId) switchView("radarView");
+      }),
+      mkBtn("Renommer", "", () => rename(p)),
+      mkBtn("Carte", "", () => window.open(`https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lon}#map=18/${p.lat}/${p.lon}`, "_blank")),
+      mkBtn("Supprimer", "del", () => del(p))
+    );
+    li.append(orb, meta, dist, acts); ul.append(li);
+  }
+}
+function mkBtn(txt, cls, fn) { const b = document.createElement("button"); b.type = "button"; b.className = "btn " + cls; b.textContent = txt; b.addEventListener("click", fn); return b; }
+
+function rename(p) {
+  const dlg = document.getElementById("renameDlg"), inp = document.getElementById("renameInput");
+  inp.value = p.name; dlg.returnValue = "";
+  dlg.onclose = () => { if (dlg.returnValue === "ok" && inp.value.trim()) { p.name = inp.value.trim(); save(); renderList(true); } };
+  dlg.showModal(); inp.select();
+}
+function del(p) {
+  const dlg = document.getElementById("delDlg");
+  document.getElementById("delText").textContent = `« ${p.name} » sera retiré du radar.`;
+  dlg.returnValue = "";
+  dlg.onclose = () => { if (dlg.returnValue === "ok") { points = points.filter(x => x !== p); if (targetId === p.id) targetId = null; save(); renderList(true); toast("Point supprimé"); } };
+  dlg.showModal();
+}
+
+/* Export / import */
+document.getElementById("exportBtn").addEventListener("click", async () => {
+  const data = JSON.stringify({ app: "detecteur-orbes", version: 1, points }, null, 2);
+  const file = new File([data], "points-detecteur.json", { type: "application/json" });
+  const cap = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? window.Capacitor.Plugins : null;
+  if (cap && cap.Filesystem && cap.Share) { // version Android (APK)
+    try {
+      const w = await cap.Filesystem.writeFile({ path: "points-detecteur.json", data, directory: "CACHE", encoding: "utf8" });
+      await cap.Share.share({ title: "Points du détecteur", files: [w.uri] });
+    } catch (e) { if (!/cancel/i.test(String(e && e.message))) toast("Export impossible : " + (e && e.message || e)); }
+    return;
+  }
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "Points du détecteur" }); return; }
+  } catch (e) { if (e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const j = JSON.parse(await f.text());
+    const arr = (Array.isArray(j) ? j : j.points || []).filter(p => isFinite(p.lat) && isFinite(p.lon));
+    const ids = new Set(points.map(p => p.id)); let added = 0;
+    for (const p of arr) {
+      const id = p.id && !ids.has(p.id) ? p.id : Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      points.push({ id, name: String(p.name || "Point importé").slice(0, 40), lat: +p.lat, lon: +p.lon, acc: Math.round(p.acc || 0), t: p.t || Date.now(), stars: p.stars || ((points.length % 7) + 1) });
+      ids.add(id); added++;
+    }
+    save(); renderList(true); toast(added + " point(s) importé(s)");
+  } catch (err) { toast("Fichier illisible : choisis un export JSON du détecteur."); }
+  e.target.value = "";
+});
+
+/* ================= Navigation ================= */
+function switchView(id) {
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === id));
+  document.querySelectorAll(".view").forEach(v => v.hidden = v.id !== id);
+  if (id === "listView") renderList(true);
+}
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => switchView(b.dataset.view)));
+
+/* ================= Divers ================= */
+let toastT;
+function toast(msg) {
+  let t = document.querySelector(".toast");
+  if (!t) { t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); document.body.append(t); }
+  t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2800);
+}
+let wakeLock = null;
+async function keepAwake() { try { if ("wakeLock" in navigator && !document.hidden) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) keepAwake(); });
+
+async function start() {
+  document.getElementById("intro").hidden = true;
+  await startCompass();   // doit être appelé pendant le geste utilisateur (iOS)
+  startGPS();
+  keepAwake();
+  beep(660, 0.05);
+  updateChips();
+  if (DEMO) { // rotation lente pour la démonstration
+    setInterval(() => { heading = (heading + 0.6) % 360; lastOrient = Date.now(); }, 50);
+  }
+}
+document.getElementById("startBtn").addEventListener("click", start);
+if (!window.isSecureContext && !DEMO) {
+  document.querySelector("#intro .small").textContent = "Attention : cette page doit être ouverte en HTTPS, sinon le GPS et la boussole sont bloqués par le navigateur.";
+}
+updateChips();
+requestAnimationFrame(draw);
+
+if ("serviceWorker" in navigator && location.protocol === "https:" && !window.Capacitor) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>

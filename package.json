@@ -1,0 +1,17 @@
+{
+  "name": "detecteur-orbes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Détecteur d'Orbes — app Android (Capacitor)",
+  "dependencies": {
+    "@capacitor/android": "6.1.2",
+    "@capacitor/core": "6.1.2",
+    "@capacitor/filesystem": "6.0.1",
+    "@capacitor/share": "6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "6.1.2",
+    "@fontsource/bungee": "5.0.8",
+    "@fontsource/chakra-petch": "5.0.13"
+  }
+}
